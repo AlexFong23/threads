@@ -1,501 +1,597 @@
-// src/App.tsx
-import React, { useState, useRef, useEffect } from 'react';
+// forum-app.tsx
+import React, { useState, useEffect, useRef } from 'react';
+
+// TypeScript interfaces for our data structure
+interface Reaction {
+  emoji: string;
+  count: number;
+}
 
 interface Comment {
   id: string;
   author: string;
-  avatar: string;
   content: string;
   timestamp: string;
-  reactions: { [key: string]: number };
+  avatar: string;
+  reactions: Reaction[];
   replies: Comment[];
-  isExpanded: boolean;
+  expanded: boolean;
 }
 
-interface ForumPost {
+interface ForumThread {
   id: string;
   title: string;
   content: string;
   author: string;
   timestamp: string;
-  tags: string[];
+  comments: Comment[];
 }
 
 const ForumApp = () => {
-  // State management
-  const [comments, setComments] = useState<Comment[]>([]);
+  // State for threads, refreshing status, and new post form
+  const [threads, setThreads] = useState<ForumThread[]>([]);
+  const [activeThread, setActiveThread] = useState<ForumThread | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [showReactionMenu, setShowReactionMenu] = useState<{id: string, x: number, y: number} | null>(null);
-  const [newComment, setNewComment] = useState('');
-  const [isFabMenuOpen, setIsFabMenuOpen] = useState(false);
-  const touchStartRef = useRef<{startY: number, scrollTop: number} | null>(null);
-  const contentRef = useRef<HTMLDivElement>(null);
+  const [showNewPostForm, setShowNewPostForm] = useState(false);
+  const [newPostTitle, setNewPostTitle] = useState('');
+  const [newPostContent, setNewPostContent] = useState('');
   
-  // Emoji reactions
-  const emojis = ['👍', '❤️', '😂', '😮', '😢', '👏'];
-  
-  // Sample forum post
-  const forumPost: ForumPost = {
-    id: 'post-1',
-    title: 'Welcome to our new community forum!',
-    content: "We're excited to launch this new platform for our community. Please share your thoughts, ideas, and questions here. Let's build something amazing together!",
-    author: 'Alex Johnson',
-    timestamp: '2 hours ago',
-    tags: ['announcement', 'welcome', 'community']
-  };
-  
-  // Initialize with sample comments
+  // Mock data for demonstration
   useEffect(() => {
-    setComments([
-      {
-        id: 'comment-1',
-        author: 'Taylor Smith',
-        avatar: 'TS',
-        content: "This is amazing! I've been waiting for something like this. Can't wait to see how the community grows.",
-        timestamp: '1 hour ago',
-        reactions: { '👍': 5, '❤️': 3 },
-        replies: [
-          {
-            id: 'reply-1-1',
-            author: 'Jordan Lee',
-            avatar: 'JL',
-            content: "Totally agree! The design looks fantastic too.",
-            timestamp: '45 min ago',
-            reactions: { '👍': 2 },
-            replies: [],
-            isExpanded: true
-          },
-          {
-            id: 'reply-1-2',
-            author: 'Morgan Chen',
-            avatar: 'MC',
-            content: "Will there be support for private messaging?",
-            timestamp: '30 min ago',
-            reactions: {},
-            replies: [
-              {
-                id: 'reply-1-2-1',
-                author: 'Alex Johnson',
-                avatar: 'AJ',
-                content: "Yes, private messaging is on our roadmap for Q3!",
-                timestamp: '15 min ago',
-                reactions: { '👏': 4 },
-                replies: [],
-                isExpanded: true
-              }
-            ],
-            isExpanded: true
-          }
-        ],
-        isExpanded: true
-      },
-      {
-        id: 'comment-2',
-        author: 'Casey Brown',
-        avatar: 'CB',
-        content: "The mobile experience is smooth. Love the gesture controls!",
-        timestamp: '50 min ago',
-        reactions: { '❤️': 7 },
-        replies: [],
-        isExpanded: true
-      },
-      {
-        id: 'comment-3',
-        author: 'Riley Davis',
-        avatar: 'RD',
-        content: "How do I customize my profile? I can't seem to find the settings.",
-        timestamp: '25 min ago',
-        reactions: {},
-        replies: [],
-        isExpanded: true
-      }
-    ]);
+    // Simulate loading data
+    setTimeout(() => {
+      setThreads(mockThreads);
+    }, 800);
   }, []);
-  
-  // Toggle comment expansion
-  const toggleComment = (commentId: string) => {
-    setComments(prev => toggleCommentRecursive(prev, commentId));
+
+  // Function to simulate real-time updates
+  const simulateNewComment = () => {
+    if (!activeThread) return;
+    
+    const newComment: Comment = {
+      id: `comment-${Date.now()}`,
+      author: 'NewUser',
+      content: 'Just joined this discussion!',
+      timestamp: 'Just now',
+      avatar: 'U',
+      reactions: [{ emoji: '👍', count: 0 }],
+      replies: [],
+      expanded: true
+    };
+    
+    const updatedThread = {
+      ...activeThread,
+      comments: [...activeThread.comments, newComment]
+    };
+    
+    setActiveThread(updatedThread);
+    setThreads(threads.map(t => t.id === updatedThread.id ? updatedThread : t));
   };
+
+  // Handle swipe to refresh
+  const touchStartY = useRef(0);
   
-  const toggleCommentRecursive = (comments: Comment[], commentId: string): Comment[] => {
-    return comments.map(comment => {
-      if (comment.id === commentId) {
-        return { ...comment, isExpanded: !comment.isExpanded };
-      }
-      if (comment.replies.length > 0) {
-        return { ...comment, replies: toggleCommentRecursive(comment.replies, commentId) };
-      }
-      return comment;
-    });
-  };
-  
-  // Add reaction to comment
-  const addReaction = (commentId: string, emoji: string) => {
-    setComments(prev => addReactionRecursive(prev, commentId, emoji));
-    setShowReactionMenu(null);
-  };
-  
-  const addReactionRecursive = (comments: Comment[], commentId: string, emoji: string): Comment[] => {
-    return comments.map(comment => {
-      if (comment.id === commentId) {
-        const newReactions = { ...comment.reactions };
-        newReactions[emoji] = (newReactions[emoji] || 0) + 1;
-        return { ...comment, reactions: newReactions };
-      }
-      if (comment.replies.length > 0) {
-        return { ...comment, replies: addReactionRecursive(comment.replies, commentId, emoji) };
-      }
-      return comment;
-    });
-  };
-  
-  // Handle touch start for swipe to refresh
   const handleTouchStart = (e: React.TouchEvent) => {
-    if (contentRef.current && contentRef.current.scrollTop === 0) {
-      touchStartRef.current = {
-        startY: e.touches[0].pageY,
-        scrollTop: contentRef.current.scrollTop
-      };
-    }
+    touchStartY.current = e.touches[0].clientY;
   };
   
-  // Handle touch move for swipe to refresh
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (!touchStartRef.current) return;
+    if (window.scrollY > 0) return;
     
-    const touchY = e.touches[0].pageY;
-    const diff = touchY - touchStartRef.current.startY;
+    const touchY = e.touches[0].clientY;
+    const diff = touchY - touchStartY.current;
     
-    if (diff > 50) {
+    if (diff > 80 && !isRefreshing) {
       setIsRefreshing(true);
       // Simulate refreshing data
       setTimeout(() => {
         setIsRefreshing(false);
-        touchStartRef.current = null;
-      }, 1000);
+      }, 1500);
     }
   };
-  
-  // Handle touch end
-  const handleTouchEnd = () => {
-    touchStartRef.current = null;
-  };
-  
-  // Handle long press for reaction menu
-  const handleLongPress = (commentId: string, e: React.TouchEvent | React.MouseEvent) => {
-    if (e.type === 'mousedown' || e.type === 'touchstart') {
-      const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-      const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
-      
-      setShowReactionMenu({ id: commentId, x: clientX, y: clientY });
-    }
-  };
-  
-  // Add a new comment
-  const handleAddComment = () => {
-    if (newComment.trim() === '') return;
+
+  // Toggle comment expansion
+  const toggleCommentExpand = (commentId: string) => {
+    if (!activeThread) return;
     
-    const newCommentObj: Comment = {
-      id: `comment-${Date.now()}`,
-      author: 'You',
-      avatar: 'ME',
-      content: newComment,
-      timestamp: 'Just now',
-      reactions: {},
-      replies: [],
-      isExpanded: true
+    const toggle = (comments: Comment[]): Comment[] => {
+      return comments.map(comment => {
+        if (comment.id === commentId) {
+          return { ...comment, expanded: !comment.expanded };
+        }
+        if (comment.replies.length > 0) {
+          return { ...comment, replies: toggle(comment.replies) };
+        }
+        return comment;
+      });
     };
     
-    setComments([...comments, newCommentObj]);
-    setNewComment('');
-    setIsFabMenuOpen(false);
+    const updatedThread = {
+      ...activeThread,
+      comments: toggle(activeThread.comments)
+    };
+    
+    setActiveThread(updatedThread);
   };
-  
-  // Render comment with nested replies
-  const renderComment = (comment: Comment, depth: number = 0) => {
-    const hasReplies = comment.replies.length > 0;
+
+  // Add reaction to a comment
+  const addReaction = (commentId: string, emoji: string) => {
+    if (!activeThread) return;
+    
+    const updateReactions = (comments: Comment[]): Comment[] => {
+      return comments.map(comment => {
+        if (comment.id === commentId) {
+          const existingReaction = comment.reactions.find(r => r.emoji === emoji);
+          const updatedReactions = existingReaction
+            ? comment.reactions.map(r => 
+                r.emoji === emoji ? { ...r, count: r.count + 1 } : r
+              )
+            : [...comment.reactions, { emoji, count: 1 }];
+          
+          return { ...comment, reactions: updatedReactions };
+        }
+        if (comment.replies.length > 0) {
+          return { ...comment, replies: updateReactions(comment.replies) };
+        }
+        return comment;
+      });
+    };
+    
+    const updatedThread = {
+      ...activeThread,
+      comments: updateReactions(activeThread.comments)
+    };
+    
+    setActiveThread(updatedThread);
+  };
+
+  // Create new post
+  const handleCreatePost = () => {
+    if (!newPostTitle.trim() || !newPostContent.trim()) return;
+    
+    const newThread: ForumThread = {
+      id: `thread-${Date.now()}`,
+      title: newPostTitle,
+      content: newPostContent,
+      author: 'CurrentUser',
+      timestamp: 'Just now',
+      comments: []
+    };
+    
+    setThreads([newThread, ...threads]);
+    setNewPostTitle('');
+    setNewPostContent('');
+    setShowNewPostForm(false);
+    setActiveThread(newThread);
+  };
+
+  // Render a single comment with nested replies
+  const renderComment = (comment: Comment, depth = 0) => {
+    const indent = depth * 16;
     
     return (
       <div 
-        key={comment.id}
-        className={`relative transition-all duration-300 ease-in-out ${
-          depth > 0 ? 'ml-4 md:ml-6 border-l-2 border-indigo-200/30 pl-3' : ''
-        }`}
+        key={comment.id} 
+        className={`mb-4 transition-all duration-300 ${depth > 0 ? 'ml-4' : ''}`}
+        style={{ marginLeft: `${indent}px` }}
       >
-        {/* Comment card */}
-        <div 
-          className={`bg-white/20 backdrop-blur-lg rounded-2xl p-4 mb-3 shadow-lg transition-all duration-300 ${
-            depth > 0 ? 'border border-purple-200/20' : ''
-          }`}
-          onTouchStart={(e) => handleLongPress(comment.id, e)}
-          onMouseDown={(e) => handleLongPress(comment.id, e)}
-        >
-          <div className="flex items-start gap-3">
-            {/* User avatar */}
-            <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-br from-purple-400 to-pink-500 flex items-center justify-center text-white font-bold">
+        <div className="bg-white/30 backdrop-blur-lg rounded-2xl p-4 border border-white/50 shadow-lg">
+          <div className="flex items-start">
+            <div className="bg-gradient-to-r from-purple-400 to-pink-500 rounded-full w-10 h-10 flex items-center justify-center text-white font-bold mr-3">
               {comment.avatar}
             </div>
-            
-            {/* Comment content */}
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <h3 className="font-bold text-white">{comment.author}</h3>
-                <span className="text-xs text-white/60">{comment.timestamp}</span>
+            <div className="flex-1">
+              <div className="flex justify-between items-start">
+                <div>
+                  <h3 className="font-semibold text-indigo-900">{comment.author}</h3>
+                  <p className="text-xs text-indigo-700/80">{comment.timestamp}</p>
+                </div>
+                <button 
+                  onClick={() => toggleCommentExpand(comment.id)}
+                  className="text-indigo-500 hover:text-indigo-700"
+                >
+                  {comment.expanded ? 'Collapse' : 'Expand'}
+                </button>
               </div>
-              <p className="mt-1 text-white/90">{comment.content}</p>
+              <p className="mt-2 text-gray-800">{comment.content}</p>
               
               {/* Reactions */}
-              {Object.keys(comment.reactions).length > 0 && (
-                <div className="mt-2 flex gap-2">
-                  {Object.entries(comment.reactions).map(([emoji, count]) => (
-                    <span 
-                      key={emoji} 
-                      className="bg-purple-500/20 text-xs px-2 py-1 rounded-full text-white flex items-center gap-1"
-                    >
-                      {emoji} {count}
-                    </span>
-                  ))}
+              <div className="mt-3 flex flex-wrap gap-2">
+                {comment.reactions.map(reaction => (
+                  <button
+                    key={reaction.emoji}
+                    onClick={() => addReaction(comment.id, reaction.emoji)}
+                    className="flex items-center bg-white/40 backdrop-blur-sm px-2 py-1 rounded-full text-sm transition-all hover:bg-white/60"
+                  >
+                    <span>{reaction.emoji}</span>
+                    <span className="ml-1 text-indigo-900">{reaction.count}</span>
+                  </button>
+                ))}
+                
+                {/* Reaction picker */}
+                <div className="relative group">
+                  <button className="bg-white/40 backdrop-blur-sm px-2 py-1 rounded-full text-sm hover:bg-white/60">
+                    <span className="opacity-70">+</span>
+                  </button>
+                  <div className="absolute bottom-full left-0 mb-2 hidden group-hover:flex bg-white/80 backdrop-blur-lg p-2 rounded-xl shadow-lg z-10">
+                    {['👍', '❤️', '😂', '😲', '👎'].map(emoji => (
+                      <button
+                        key={emoji}
+                        onClick={() => addReaction(comment.id, emoji)}
+                        className="text-2xl mx-1 hover:scale-110 transition-transform"
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              )}
+              </div>
             </div>
           </div>
         </div>
         
-        {/* Expand/collapse button for replies */}
-        {hasReplies && (
-          <button 
-            onClick={() => toggleComment(comment.id)}
-            className="flex items-center text-sm text-indigo-200 mb-2 ml-4"
-          >
-            <span className="mr-1">
-              {comment.isExpanded ? '▼' : '▶'}
-            </span>
-            {comment.isExpanded 
-              ? `Collapse ${comment.replies.length} replies` 
-              : `Expand ${comment.replies.length} replies`}
-          </button>
-        )}
-        
-        {/* Replies */}
-        {hasReplies && comment.isExpanded && (
-          <div className="mt-1">
+        {/* Nested replies */}
+        {comment.expanded && comment.replies.length > 0 && (
+          <div className="mt-3">
             {comment.replies.map(reply => renderComment(reply, depth + 1))}
           </div>
         )}
       </div>
     );
   };
-  
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-800 flex flex-col font-['Poppins']">
-      {/* Glassmorphism header */}
-      <header className="sticky top-0 z-50 bg-white/10 backdrop-blur-xl py-4 px-5 border-b border-white/20 shadow-lg">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="bg-gradient-to-r from-pink-500 to-purple-600 w-10 h-10 rounded-xl flex items-center justify-center">
-              <span className="text-white font-bold text-xl">C</span>
+    <div className="min-h-screen bg-gradient-to-br from-blue-100 via-purple-100 to-pink-100 font-sans">
+      {/* Header */}
+      <header className="bg-white/30 backdrop-blur-lg border-b border-white/50 sticky top-0 z-50 shadow-md">
+        <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center">
+            <div className="bg-gradient-to-r from-blue-400 to-purple-500 rounded-lg w-10 h-10 flex items-center justify-center text-white font-bold">
+              F
             </div>
-            <h1 className="text-xl font-bold text-white">CommunityHub</h1>
+            <h1 className="ml-3 text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600">
+              ForumGlass
+            </h1>
           </div>
-          
-          <div className="flex items-center gap-3">
-            <button className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <div className="flex items-center space-x-4">
+            <button className="bg-white/40 backdrop-blur-sm p-2 rounded-full hover:bg-white/60 transition-colors">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-indigo-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </button>
-            <button className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            <button className="bg-white/40 backdrop-blur-sm p-2 rounded-full hover:bg-white/60 transition-colors">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-indigo-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
               </svg>
             </button>
           </div>
         </div>
       </header>
-      
-      {/* Swipe refresh indicator */}
-      {isRefreshing && (
-        <div className="w-full flex justify-center py-4">
-          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-pink-500"></div>
-        </div>
-      )}
-      
-      {/* Main content */}
+
+      {/* Main Content */}
       <main 
-        ref={contentRef}
-        className="flex-1 overflow-y-auto pb-24 pt-4 px-4"
+        className="max-w-3xl mx-auto px-4 py-6 relative"
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
       >
-        {/* Forum post */}
-        <div className="bg-white/20 backdrop-blur-lg rounded-2xl p-5 mb-5 shadow-lg border border-purple-200/20">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="bg-gradient-to-r from-blue-500 to-indigo-600 w-12 h-12 rounded-full flex items-center justify-center text-white font-bold">
-              AJ
+        {/* Swipe to refresh indicator */}
+        {isRefreshing && (
+          <div className="fixed top-16 left-0 right-0 flex justify-center z-40">
+            <div className="bg-white/80 backdrop-blur-md px-6 py-3 rounded-full shadow-lg flex items-center">
+              <svg className="animate-spin h-5 w-5 text-indigo-600 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              <span className="text-indigo-700 font-medium">Updating discussions...</span>
             </div>
-            <div>
-              <h2 className="text-xl font-bold text-white">{forumPost.title}</h2>
-              <div className="flex items-center gap-2">
-                <span className="text-white/80 text-sm">by {forumPost.author}</span>
-                <span className="text-white/60 text-xs">•</span>
-                <span className="text-white/60 text-xs">{forumPost.timestamp}</span>
+          </div>
+        )}
+
+        {activeThread ? (
+          // Thread Detail View
+          <div className="pb-24">
+            {/* Back button */}
+            <button 
+              onClick={() => setActiveThread(null)}
+              className="flex items-center text-indigo-600 mb-4 hover:text-indigo-800 transition-colors"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+              </svg>
+              Back to discussions
+            </button>
+            
+            {/* Thread content */}
+            <div className="bg-white/30 backdrop-blur-lg rounded-2xl p-6 mb-6 border border-white/50 shadow-lg">
+              <h1 className="text-2xl font-bold text-indigo-900 mb-2">{activeThread.title}</h1>
+              <div className="flex items-center text-sm mb-4">
+                <div className="bg-gradient-to-r from-blue-400 to-purple-500 rounded-full w-8 h-8 flex items-center justify-center text-white font-bold mr-2">
+                  {activeThread.author.charAt(0)}
+                </div>
+                <div>
+                  <span className="font-medium text-indigo-800">{activeThread.author}</span>
+                  <span className="mx-2 text-indigo-700/60">•</span>
+                  <span className="text-indigo-700/80">{activeThread.timestamp}</span>
+                </div>
+              </div>
+              <p className="text-gray-800">{activeThread.content}</p>
+              
+              <div className="mt-6 flex space-x-4">
+                <button className="flex items-center text-indigo-700 hover:text-indigo-900">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 10h4.764a2 2 0 011.789 2.894l-3.5 7A2 2 0 0115.263 21h-4.017c-.163 0-.326-.02-.485-.06L7 20m7-10V5a2 2 0 00-2-2h-.095c-.5 0-.905.405-.905.905 0 .714-.211 1.412-.608 2.006L7 11v9m7-10h-2M7 20H5a2 2 0 01-2-2v-6a2 2 0 012-2h2.5" />
+                  </svg>
+                  24
+                </button>
+                <button className="flex items-center text-indigo-700 hover:text-indigo-900">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                  </svg>
+                  {activeThread.comments.length} comments
+                </button>
+              </div>
+            </div>
+            
+            {/* Comments section */}
+            <div className="mb-24">
+              <h2 className="text-xl font-semibold text-indigo-900 mb-4">Discussion ({activeThread.comments.length})</h2>
+              
+              {activeThread.comments.length > 0 ? (
+                <div>
+                  {activeThread.comments.map(comment => renderComment(comment))}
+                </div>
+              ) : (
+                <div className="bg-white/30 backdrop-blur-lg rounded-2xl p-8 text-center border border-white/50 shadow-lg">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto text-indigo-500/70" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                  </svg>
+                  <h3 className="mt-4 text-lg font-medium text-indigo-900">No comments yet</h3>
+                  <p className="mt-1 text-indigo-700/80">Be the first to start the discussion!</p>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          // Thread List View
+          <div className="pb-24">
+            <h1 className="text-2xl font-bold text-indigo-900 mb-6">Community Discussions</h1>
+            
+            {threads.length > 0 ? (
+              <div className="space-y-6">
+                {threads.map(thread => (
+                  <div 
+                    key={thread.id} 
+                    className="bg-white/30 backdrop-blur-lg rounded-2xl p-5 border border-white/50 shadow-lg transition-all hover:shadow-xl cursor-pointer"
+                    onClick={() => setActiveThread(thread)}
+                  >
+                    <h2 className="text-lg font-semibold text-indigo-900 mb-2">{thread.title}</h2>
+                    <p className="text-gray-700 line-clamp-2 mb-4">{thread.content}</p>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center">
+                        <div className="bg-gradient-to-r from-blue-400 to-purple-500 rounded-full w-8 h-8 flex items-center justify-center text-white font-bold mr-2">
+                          {thread.author.charAt(0)}
+                        </div>
+                        <span className="text-sm font-medium text-indigo-800">{thread.author}</span>
+                        <span className="mx-2 text-indigo-700/60">•</span>
+                        <span className="text-sm text-indigo-700/80">{thread.timestamp}</span>
+                      </div>
+                      <div className="flex items-center text-indigo-700">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                        </svg>
+                        <span className="text-sm">{thread.comments.length}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="bg-white/30 backdrop-blur-lg rounded-2xl p-8 text-center border border-white/50 shadow-lg">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 mx-auto text-indigo-500/70" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                </svg>
+                <h3 className="mt-4 text-lg font-medium text-indigo-900">No discussions yet</h3>
+                <p className="mt-1 text-indigo-700/80 mb-4">Start a new discussion to get things going</p>
+                <button 
+                  onClick={() => setShowNewPostForm(true)}
+                  className="bg-gradient-to-r from-blue-500 to-purple-600 text-white px-4 py-2 rounded-full font-medium hover:opacity-90 transition-opacity"
+                >
+                  Create First Post
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Floating Action Button */}
+        <button 
+          onClick={() => activeThread ? simulateNewComment() : setShowNewPostForm(true)}
+          className="fixed bottom-6 right-6 w-16 h-16 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center text-white shadow-lg z-40 hover:opacity-90 transition-opacity"
+        >
+          {activeThread ? (
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+            </svg>
+          ) : (
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+          )}
+        </button>
+
+        {/* New Post Form */}
+        {showNewPostForm && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-white/90 backdrop-blur-lg rounded-2xl w-full max-w-md p-6 border border-white/50 shadow-xl">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-bold text-indigo-900">Create New Post</h2>
+                <button 
+                  onClick={() => setShowNewPostForm(false)}
+                  className="text-indigo-500 hover:text-indigo-700"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              
+              <div className="space-y-4">
+                <div>
+                  <label htmlFor="post-title" className="block text-sm font-medium text-indigo-800 mb-1">Title</label>
+                  <input
+                    type="text"
+                    id="post-title"
+                    className="w-full bg-white/80 backdrop-blur-sm border border-indigo-200 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    placeholder="What's your topic?"
+                    value={newPostTitle}
+                    onChange={(e) => setNewPostTitle(e.target.value)}
+                  />
+                </div>
+                
+                <div>
+                  <label htmlFor="post-content" className="block text-sm font-medium text-indigo-800 mb-1">Content</label>
+                  <textarea
+                    id="post-content"
+                    rows={4}
+                    className="w-full bg-white/80 backdrop-blur-sm border border-indigo-200 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    placeholder="Share your thoughts..."
+                    value={newPostContent}
+                    onChange={(e) => setNewPostContent(e.target.value)}
+                  ></textarea>
+                </div>
+                
+                <button
+                  onClick={handleCreatePost}
+                  className="w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white px-4 py-3 rounded-lg font-medium hover:opacity-90 transition-opacity"
+                >
+                  Post to Community
+                </button>
               </div>
             </div>
           </div>
-          
-          <p className="text-white/90 mb-4">{forumPost.content}</p>
-          
-          <div className="flex flex-wrap gap-2">
-            {forumPost.tags.map(tag => (
-              <span 
-                key={tag} 
-                className="bg-indigo-500/30 text-indigo-200 text-xs px-3 py-1 rounded-full"
-              >
-                #{tag}
+        )}
+      </main>
+
+      {/* Footer */}
+      <footer className="bg-white/30 backdrop-blur-lg border-t border-white/50 py-6">
+        <div className="max-w-3xl mx-auto px-4">
+          <div className="flex flex-col md:flex-row justify-between items-center">
+            <div className="flex items-center mb-4 md:mb-0">
+              <div className="bg-gradient-to-r from-blue-400 to-purple-500 rounded-lg w-8 h-8 flex items-center justify-center text-white font-bold mr-2">
+                F
+              </div>
+              <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600">
+                ForumGlass
               </span>
-            ))}
-          </div>
-          
-          <div className="flex justify-between items-center mt-4 pt-4 border-t border-white/20">
-            <div className="flex gap-4">
-              <button className="flex items-center gap-1 text-white/80 hover:text-white">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 10h4.764a2 2 0 011.789 2.894l-3.5 7A2 2 0 0115.263 21h-4.017c-.163 0-.326-.02-.485-.06L7 20m7-10V5a2 2 0 00-2-2h-.095c-.5 0-.905.405-.905.905 0 .714-.211 1.412-.608 2.006L7 11v9m7-10h-2M7 20H5a2 2 0 01-2-2v-6a2 2 0 012-2h2.5" />
-                </svg>
-                <span>42</span>
-              </button>
-              <button className="flex items-center gap-1 text-white/80 hover:text-white">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                </svg>
-                <span>{comments.length}</span>
-              </button>
             </div>
             
-            <button className="text-pink-400 hover:text-pink-300 flex items-center gap-1">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
-              </svg>
-              <span>Save</span>
-            </button>
+            <div className="flex space-x-6">
+              <a href="#" className="text-indigo-700 hover:text-indigo-900 transition-colors">About</a>
+              <a href="#" className="text-indigo-700 hover:text-indigo-900 transition-colors">Guidelines</a>
+              <a href="#" className="text-indigo-700 hover:text-indigo-900 transition-colors">Privacy</a>
+              <a href="#" className="text-indigo-700 hover:text-indigo-900 transition-colors">Terms</a>
+            </div>
+          </div>
+          
+          <div className="mt-4 text-center text-sm text-indigo-700/80">
+            © {new Date().getFullYear()} ForumGlass. All rights reserved.
           </div>
         </div>
-        
-        {/* Comments section header */}
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-bold text-white">Comments</h3>
-          <div className="flex items-center gap-2">
-            <span className="text-white/60 text-sm">Sort by:</span>
-            <select className="bg-indigo-900/50 text-white text-sm rounded-lg px-2 py-1 border border-white/20">
-              <option>Newest</option>
-              <option>Most Popular</option>
-              <option>Oldest</option>
-            </select>
-          </div>
-        </div>
-        
-        {/* Comments list */}
-        <div className="mb-24">
-          {comments.map(comment => renderComment(comment))}
-        </div>
-      </main>
-      
-      {/* Floating Action Button */}
-      <div className="fixed bottom-6 right-6 z-50">
-        {isFabMenuOpen ? (
-          <div className="flex flex-col items-end gap-3">
-            <button 
-              onClick={handleAddComment}
-              className="bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-full px-5 py-3 shadow-lg font-medium flex items-center gap-2 transition-transform hover:scale-105"
-            >
-              Post Comment
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clipRule="evenodd" />
-              </svg>
-            </button>
-            <textarea
-              value={newComment}
-              onChange={(e) => setNewComment(e.target.value)}
-              placeholder="Add your comment..."
-              className="w-full bg-white/20 backdrop-blur-lg rounded-2xl p-4 text-white placeholder-white/50 border border-white/20 resize-none focus:outline-none focus:ring-2 focus:ring-purple-400"
-              rows={3}
-            />
-            <button 
-              onClick={() => setIsFabMenuOpen(false)}
-              className="bg-gradient-to-r from-gray-700 to-gray-900 text-white rounded-full w-14 h-14 flex items-center justify-center shadow-lg transition-transform hover:scale-110"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-        ) : (
-          <button 
-            onClick={() => setIsFabMenuOpen(true)}
-            className="bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-full w-14 h-14 flex items-center justify-center shadow-lg transition-transform hover:scale-110"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-            </svg>
-          </button>
-        )}
-      </div>
-      
-      {/* Reaction menu */}
-      {showReactionMenu && (
-        <div 
-          className="fixed z-50 bg-white/20 backdrop-blur-xl rounded-full p-2 shadow-xl flex gap-2"
-          style={{
-            left: showReactionMenu.x - 120,
-            top: showReactionMenu.y - 60
-          }}
-        >
-          {emojis.map(emoji => (
-            <button
-              key={emoji}
-              onClick={() => addReaction(showReactionMenu.id, emoji)}
-              className="text-2xl w-10 h-10 flex items-center justify-center rounded-full hover:bg-white/30 transition-all transform hover:scale-125"
-            >
-              {emoji}
-            </button>
-          ))}
-        </div>
-      )}
-      
-      {/* Glassmorphism footer */}
-      <footer className="sticky bottom-0 bg-white/10 backdrop-blur-xl py-3 px-5 border-t border-white/20 flex justify-around">
-        <button className="flex flex-col items-center text-pink-400">
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-          </svg>
-          <span className="text-xs mt-1">Home</span>
-        </button>
-        
-        <button className="flex flex-col items-center text-white/70">
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-          </svg>
-          <span className="text-xs mt-1">Communities</span>
-        </button>
-        
-        <button className="flex flex-col items-center text-white/70">
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-          </svg>
-          <span className="text-xs mt-1">Messages</span>
-        </button>
-        
-        <button className="flex flex-col items-center text-white/70">
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-          </svg>
-          <span className="text-xs mt-1">Profile</span>
-        </button>
       </footer>
     </div>
   );
 };
+
+// Mock data for demonstration
+const mockThreads: ForumThread[] = [
+  {
+    id: "thread-1",
+    title: "What's your favorite UI design trend in 2023?",
+    content: "I've been seeing more glassmorphism designs recently, especially in mobile apps. What do you think about this trend? Are there other design styles you're excited about?",
+    author: "DesignEnthusiast",
+    timestamp: "2 hours ago",
+    comments: [
+      {
+        id: "comment-1",
+        author: "CreativeCoder",
+        content: "I'm really loving glassmorphism! It adds such a modern and sleek feel to interfaces. The subtle transparency and blur effects create depth without being overwhelming.",
+        timestamp: "1 hour ago",
+        avatar: "C",
+        reactions: [{ emoji: "👍", count: 12 }, { emoji: "❤️", count: 5 }],
+        replies: [
+          {
+            id: "reply-1-1",
+            author: "DesignEnthusiast",
+            content: "Totally agree! I also appreciate how it works well with vibrant color palettes.",
+            timestamp: "45 min ago",
+            avatar: "D",
+            reactions: [{ emoji: "👍", count: 3 }],
+            replies: [],
+            expanded: true
+          }
+        ],
+        expanded: true
+      },
+      {
+        id: "comment-2",
+        author: "UXMaster",
+        content: "While glassmorphism is visually appealing, I think we should be cautious about accessibility. The transparency effects can sometimes reduce readability for users with visual impairments.",
+        timestamp: "50 min ago",
+        avatar: "U",
+        reactions: [{ emoji: "👍", count: 8 }, { emoji: "👎", count: 1 }],
+        replies: [
+          {
+            id: "reply-2-1",
+            author: "AccessibilityAdvocate",
+            content: "That's a great point. I always recommend having a solid background fallback for critical text elements.",
+            timestamp: "30 min ago",
+            avatar: "A",
+            reactions: [{ emoji: "👍", count: 5 }],
+            replies: [],
+            expanded: true
+          },
+          {
+            id: "reply-2-2",
+            author: "DesignEnthusiast",
+            content: "Excellent reminder! We should always prioritize accessibility over aesthetics.",
+            timestamp: "25 min ago",
+            avatar: "D",
+            reactions: [{ emoji: "❤️", count: 3 }],
+            replies: [],
+            expanded: true
+          }
+        ],
+        expanded: true
+      }
+    ]
+  },
+  {
+    id: "thread-2",
+    title: "How do you manage state in large React applications?",
+    content: "As our app grows, state management is becoming more complex. What solutions have you found effective for managing state at scale?",
+    author: "ReactDev",
+    timestamp: "5 hours ago",
+    comments: [
+      {
+        id: "comment-3",
+        author: "StateMaster",
+        content: "I've had great success with Zustand. It's lightweight and doesn't require as much boilerplate as Redux.",
+        timestamp: "3 hours ago",
+        avatar: "S",
+        reactions: [{ emoji: "👍", count: 7 }],
+        replies: [],
+        expanded: true
+      }
+    ]
+  },
+  {
+    id: "thread-3",
+    title: "Best practices for mobile-first design implementation",
+    content: "Looking for advice on implementing truly responsive mobile-first designs. What frameworks or techniques have worked best for you?",
+    author: "MobileDesigner",
+    timestamp: "1 day ago",
+    comments: []
+  }
+];
 
 export default ForumApp;
