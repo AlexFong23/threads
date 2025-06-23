@@ -1,501 +1,472 @@
-// src/App.tsx
-import React, { useState, useRef, useEffect } from 'react';
+// CommunityForum.tsx
+import React, { useState, useEffect, useRef } from 'react';
+
+// Importing custom font from Google Fonts
+const fontLink = document.createElement('link');
+fontLink.href = 'https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap';
+fontLink.rel = 'stylesheet';
+document.head.appendChild(fontLink);
+
+// Types
+interface User {
+  id: string;
+  name: string;
+  avatar: string;
+}
+
+interface Reaction {
+  emoji: string;
+  count: number;
+  users: string[];
+}
 
 interface Comment {
   id: string;
-  author: string;
-  avatar: string;
+  user: User;
   content: string;
   timestamp: string;
-  reactions: { [key: string]: number };
+  reactions: Reaction[];
   replies: Comment[];
   isExpanded: boolean;
 }
 
-interface ForumPost {
-  id: string;
-  title: string;
-  content: string;
-  author: string;
-  timestamp: string;
-  tags: string[];
-}
+// Initial data
+const mockUsers: User[] = [
+  { id: '1', name: 'Alex Johnson', avatar: 'AJ' },
+  { id: '2', name: 'Taylor Swift', avatar: 'TS' },
+  { id: '3', name: 'Chris Evans', avatar: 'CE' },
+  { id: '4', name: 'Emma Watson', avatar: 'EW' },
+  { id: '5', name: 'Michael Scott', avatar: 'MS' },
+];
 
-const ForumApp = () => {
-  // State management
+const emojiOptions = ['👍', '❤️', '😂', '😮', '😢', '👏'];
+
+const generateMockComments = (depth = 0): Comment[] => {
+  if (depth > 3) return [];
+  
+  return Array.from({ length: depth === 0 ? 5 : Math.floor(Math.random() * 3) + 1 }, (_, i) => {
+    const user = mockUsers[Math.floor(Math.random() * mockUsers.length)];
+    const replies = depth < 3 ? generateMockComments(depth + 1) : [];
+    
+    return {
+      id: `${depth}-${i}-${Date.now()}`,
+      user,
+      content: depth === 0 
+        ? `Discussion starter #${i+1}: Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.`
+        : `Reply #${i+1}: Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.`,
+      timestamp: `${Math.floor(Math.random() * 60)} minutes ago`,
+      reactions: emojiOptions.slice(0, Math.floor(Math.random() * 4) + 2).map(emoji => ({
+        emoji,
+        count: Math.floor(Math.random() * 20) + 1,
+        users: Array.from({ length: Math.floor(Math.random() * 5) }, (_, i) => `User${i+1}`)
+      })),
+      replies,
+      isExpanded: depth < 2,
+    };
+  });
+};
+
+const CommunityForum: React.FC = () => {
+  // State
   const [comments, setComments] = useState<Comment[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [showReactionMenu, setShowReactionMenu] = useState<{id: string, x: number, y: number} | null>(null);
-  const [newComment, setNewComment] = useState('');
-  const [isFabMenuOpen, setIsFabMenuOpen] = useState(false);
-  const touchStartRef = useRef<{startY: number, scrollTop: number} | null>(null);
-  const contentRef = useRef<HTMLDivElement>(null);
-  
-  // Emoji reactions
-  const emojis = ['👍', '❤️', '😂', '😮', '😢', '👏'];
-  
-  // Sample forum post
-  const forumPost: ForumPost = {
-    id: 'post-1',
-    title: 'Welcome to our new community forum!',
-    content: "We're excited to launch this new platform for our community. Please share your thoughts, ideas, and questions here. Let's build something amazing together!",
-    author: 'Alex Johnson',
-    timestamp: '2 hours ago',
-    tags: ['announcement', 'welcome', 'community']
-  };
-  
-  // Initialize with sample comments
+  const [showReactionMenu, setShowReactionMenu] = useState<{commentId: string, position: {x: number, y: number}} | null>(null);
+  const [newPostModalOpen, setNewPostModalOpen] = useState(false);
+  const [postContent, setPostContent] = useState('');
+  const touchStartRef = useRef<{time: number, commentId: string} | null>(null);
+  const mainContentRef = useRef<HTMLDivElement>(null);
+  const refreshTriggerRef = useRef<HTMLDivElement>(null);
+
+  // Initialize comments
   useEffect(() => {
-    setComments([
-      {
-        id: 'comment-1',
-        author: 'Taylor Smith',
-        avatar: 'TS',
-        content: "This is amazing! I've been waiting for something like this. Can't wait to see how the community grows.",
-        timestamp: '1 hour ago',
-        reactions: { '👍': 5, '❤️': 3 },
-        replies: [
-          {
-            id: 'reply-1-1',
-            author: 'Jordan Lee',
-            avatar: 'JL',
-            content: "Totally agree! The design looks fantastic too.",
-            timestamp: '45 min ago',
-            reactions: { '👍': 2 },
-            replies: [],
-            isExpanded: true
-          },
-          {
-            id: 'reply-1-2',
-            author: 'Morgan Chen',
-            avatar: 'MC',
-            content: "Will there be support for private messaging?",
-            timestamp: '30 min ago',
-            reactions: {},
-            replies: [
-              {
-                id: 'reply-1-2-1',
-                author: 'Alex Johnson',
-                avatar: 'AJ',
-                content: "Yes, private messaging is on our roadmap for Q3!",
-                timestamp: '15 min ago',
-                reactions: { '👏': 4 },
-                replies: [],
-                isExpanded: true
-              }
-            ],
-            isExpanded: true
-          }
-        ],
-        isExpanded: true
-      },
-      {
-        id: 'comment-2',
-        author: 'Casey Brown',
-        avatar: 'CB',
-        content: "The mobile experience is smooth. Love the gesture controls!",
-        timestamp: '50 min ago',
-        reactions: { '❤️': 7 },
-        replies: [],
-        isExpanded: true
-      },
-      {
-        id: 'comment-3',
-        author: 'Riley Davis',
-        avatar: 'RD',
-        content: "How do I customize my profile? I can't seem to find the settings.",
-        timestamp: '25 min ago',
-        reactions: {},
-        replies: [],
-        isExpanded: true
+    setComments(generateMockComments());
+    
+    // Simulate WebSocket connection
+    const wsInterval = setInterval(() => {
+      // Simulate new comments being added
+      if (comments.length > 0 && Math.random() > 0.7) {
+        const newComment = generateMockComments()[0];
+        setComments(prev => [newComment, ...prev]);
       }
-    ]);
+    }, 10000);
+    
+    return () => clearInterval(wsInterval);
   }, []);
-  
+
   // Toggle comment expansion
   const toggleComment = (commentId: string) => {
-    setComments(prev => toggleCommentRecursive(prev, commentId));
-  };
-  
-  const toggleCommentRecursive = (comments: Comment[], commentId: string): Comment[] => {
-    return comments.map(comment => {
-      if (comment.id === commentId) {
-        return { ...comment, isExpanded: !comment.isExpanded };
-      }
-      if (comment.replies.length > 0) {
-        return { ...comment, replies: toggleCommentRecursive(comment.replies, commentId) };
-      }
-      return comment;
-    });
-  };
-  
-  // Add reaction to comment
-  const addReaction = (commentId: string, emoji: string) => {
-    setComments(prev => addReactionRecursive(prev, commentId, emoji));
-    setShowReactionMenu(null);
-  };
-  
-  const addReactionRecursive = (comments: Comment[], commentId: string, emoji: string): Comment[] => {
-    return comments.map(comment => {
-      if (comment.id === commentId) {
-        const newReactions = { ...comment.reactions };
-        newReactions[emoji] = (newReactions[emoji] || 0) + 1;
-        return { ...comment, reactions: newReactions };
-      }
-      if (comment.replies.length > 0) {
-        return { ...comment, replies: addReactionRecursive(comment.replies, commentId, emoji) };
-      }
-      return comment;
-    });
-  };
-  
-  // Handle touch start for swipe to refresh
-  const handleTouchStart = (e: React.TouchEvent) => {
-    if (contentRef.current && contentRef.current.scrollTop === 0) {
-      touchStartRef.current = {
-        startY: e.touches[0].pageY,
-        scrollTop: contentRef.current.scrollTop
-      };
-    }
-  };
-  
-  // Handle touch move for swipe to refresh
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (!touchStartRef.current) return;
+    const toggle = (comments: Comment[]): Comment[] => {
+      return comments.map(comment => {
+        if (comment.id === commentId) {
+          return { ...comment, isExpanded: !comment.isExpanded };
+        }
+        if (comment.replies.length > 0) {
+          return { ...comment, replies: toggle(comment.replies) };
+        }
+        return comment;
+      });
+    };
     
-    const touchY = e.touches[0].pageY;
-    const diff = touchY - touchStartRef.current.startY;
-    
-    if (diff > 50) {
-      setIsRefreshing(true);
-      // Simulate refreshing data
-      setTimeout(() => {
-        setIsRefreshing(false);
-        touchStartRef.current = null;
-      }, 1000);
-    }
+    setComments(toggle(comments));
   };
-  
-  // Handle touch end
+
+  // Handle reaction long press
+  const handleTouchStart = (commentId: string) => {
+    touchStartRef.current = { time: Date.now(), commentId };
+    
+    const timer = setTimeout(() => {
+      if (touchStartRef.current?.commentId === commentId) {
+        setShowReactionMenu({ commentId, position: { x: 50, y: 50 } });
+      }
+    }, 500);
+    
+    const clearTimer = () => {
+      clearTimeout(timer);
+      document.removeEventListener('touchend', clearTimer);
+    };
+    
+    document.addEventListener('touchend', clearTimer, { once: true });
+  };
+
   const handleTouchEnd = () => {
     touchStartRef.current = null;
   };
-  
-  // Handle long press for reaction menu
-  const handleLongPress = (commentId: string, e: React.TouchEvent | React.MouseEvent) => {
-    if (e.type === 'mousedown' || e.type === 'touchstart') {
-      const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-      const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
-      
-      setShowReactionMenu({ id: commentId, x: clientX, y: clientY });
-    }
-  };
-  
-  // Add a new comment
-  const handleAddComment = () => {
-    if (newComment.trim() === '') return;
-    
-    const newCommentObj: Comment = {
-      id: `comment-${Date.now()}`,
-      author: 'You',
-      avatar: 'ME',
-      content: newComment,
-      timestamp: 'Just now',
-      reactions: {},
-      replies: [],
-      isExpanded: true
+
+  // Add reaction to comment
+  const addReaction = (commentId: string, emoji: string) => {
+    const updateComments = (comments: Comment[]): Comment[] => {
+      return comments.map(comment => {
+        if (comment.id === commentId) {
+          const existingReaction = comment.reactions.find(r => r.emoji === emoji);
+          const updatedReactions = existingReaction
+            ? comment.reactions.map(r => 
+                r.emoji === emoji ? { ...r, count: r.count + 1 } : r
+              )
+            : [...comment.reactions, { emoji, count: 1, users: ['You'] }];
+          
+          return { ...comment, reactions: updatedReactions };
+        }
+        
+        if (comment.replies.length > 0) {
+          return { ...comment, replies: updateComments(comment.replies) };
+        }
+        
+        return comment;
+      });
     };
     
-    setComments([...comments, newCommentObj]);
-    setNewComment('');
-    setIsFabMenuOpen(false);
+    setComments(updateComments(comments));
+    setShowReactionMenu(null);
   };
-  
-  // Render comment with nested replies
-  const renderComment = (comment: Comment, depth: number = 0) => {
-    const hasReplies = comment.replies.length > 0;
+
+  // Handle swipe to refresh
+  const handleTouchStartRefresh = (e: React.TouchEvent) => {
+    const touchY = e.touches[0].clientY;
+    if (mainContentRef.current && mainContentRef.current.scrollTop === 0) {
+      setIsRefreshing(true);
+    }
+  };
+
+  const handleTouchMoveRefresh = (e: React.TouchEvent) => {
+    if (!isRefreshing) return;
+    
+    const touchY = e.touches[0].clientY;
+    if (refreshTriggerRef.current) {
+      refreshTriggerRef.current.style.transform = `translateY(${Math.min(touchY, 100)}px)`;
+    }
+  };
+
+  const handleTouchEndRefresh = () => {
+    if (isRefreshing) {
+      setIsRefreshing(false);
+      // Simulate refresh
+      setTimeout(() => {
+        setComments(generateMockComments());
+        if (refreshTriggerRef.current) {
+          refreshTriggerRef.current.style.transform = 'translateY(0)';
+        }
+      }, 1000);
+    }
+  };
+
+  // Submit new post
+  const handleSubmitPost = () => {
+    if (postContent.trim()) {
+      const newComment: Comment = {
+        id: `new-${Date.now()}`,
+        user: mockUsers[0], // Current user
+        content: postContent,
+        timestamp: 'Just now',
+        reactions: [],
+        replies: [],
+        isExpanded: true,
+      };
+      
+      setComments(prev => [newComment, ...prev]);
+      setPostContent('');
+      setNewPostModalOpen(false);
+    }
+  };
+
+  // Recursive comment component
+  const CommentComponent: React.FC<{ comment: Comment; depth?: number }> = ({ 
+    comment, 
+    depth = 0 
+  }) => {
+    const indent = depth * 16;
     
     return (
       <div 
-        key={comment.id}
-        className={`relative transition-all duration-300 ease-in-out ${
-          depth > 0 ? 'ml-4 md:ml-6 border-l-2 border-indigo-200/30 pl-3' : ''
-        }`}
+        className={`mb-4 transition-all duration-300 ${depth > 0 ? 'ml-4' : ''}`}
+        style={{ marginLeft: `${indent}px` }}
       >
-        {/* Comment card */}
+        {/* Comment header */}
         <div 
-          className={`bg-white/20 backdrop-blur-lg rounded-2xl p-4 mb-3 shadow-lg transition-all duration-300 ${
-            depth > 0 ? 'border border-purple-200/20' : ''
-          }`}
-          onTouchStart={(e) => handleLongPress(comment.id, e)}
-          onMouseDown={(e) => handleLongPress(comment.id, e)}
+          className="flex items-start space-x-3 p-3 rounded-xl bg-white/10 backdrop-blur-lg"
+          onTouchStart={() => handleTouchStart(comment.id)}
+          onTouchEnd={handleTouchEnd}
         >
-          <div className="flex items-start gap-3">
-            {/* User avatar */}
-            <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-br from-purple-400 to-pink-500 flex items-center justify-center text-white font-bold">
-              {comment.avatar}
+          {/* User avatar */}
+          <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-br from-pink-400 to-purple-600 flex items-center justify-center text-white font-bold">
+            {comment.user.avatar}
+          </div>
+          
+          {/* Comment content */}
+          <div className="flex-1">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-white">{comment.user.name}</h3>
+              <span className="text-xs text-white/60">{comment.timestamp}</span>
             </div>
+            <p className="mt-1 text-white/90">{comment.content}</p>
             
-            {/* Comment content */}
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <h3 className="font-bold text-white">{comment.author}</h3>
-                <span className="text-xs text-white/60">{comment.timestamp}</span>
-              </div>
-              <p className="mt-1 text-white/90">{comment.content}</p>
-              
-              {/* Reactions */}
-              {Object.keys(comment.reactions).length > 0 && (
-                <div className="mt-2 flex gap-2">
-                  {Object.entries(comment.reactions).map(([emoji, count]) => (
-                    <span 
-                      key={emoji} 
-                      className="bg-purple-500/20 text-xs px-2 py-1 rounded-full text-white flex items-center gap-1"
-                    >
-                      {emoji} {count}
-                    </span>
-                  ))}
-                </div>
-              )}
+            {/* Reactions */}
+            <div className="mt-2 flex flex-wrap gap-1">
+              {comment.reactions.map((reaction, idx) => (
+                <button 
+                  key={idx}
+                  className="px-2 py-1 rounded-full bg-white/20 backdrop-blur-sm text-sm flex items-center space-x-1"
+                  onClick={() => addReaction(comment.id, reaction.emoji)}
+                >
+                  <span>{reaction.emoji}</span>
+                  <span className="text-white/80">{reaction.count}</span>
+                </button>
+              ))}
             </div>
           </div>
         </div>
         
-        {/* Expand/collapse button for replies */}
-        {hasReplies && (
-          <button 
+        {/* Expand/Collapse replies */}
+        {comment.replies.length > 0 && (
+          <button
+            className="mt-2 ml-3 text-sm font-medium text-pink-300 flex items-center"
             onClick={() => toggleComment(comment.id)}
-            className="flex items-center text-sm text-indigo-200 mb-2 ml-4"
           >
-            <span className="mr-1">
-              {comment.isExpanded ? '▼' : '▶'}
-            </span>
-            {comment.isExpanded 
-              ? `Collapse ${comment.replies.length} replies` 
-              : `Expand ${comment.replies.length} replies`}
+            {comment.isExpanded ? 'Hide replies' : `Show ${comment.replies.length} replies`}
+            <svg 
+              className={`ml-1 w-4 h-4 transition-transform ${comment.isExpanded ? 'rotate-180' : ''}`}
+              fill="none" 
+              stroke="currentColor" 
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
           </button>
         )}
         
         {/* Replies */}
-        {hasReplies && comment.isExpanded && (
-          <div className="mt-1">
-            {comment.replies.map(reply => renderComment(reply, depth + 1))}
+        {comment.isExpanded && comment.replies.length > 0 && (
+          <div className="mt-3 border-l-2 border-white/20 pl-3">
+            {comment.replies.map(reply => (
+              <CommentComponent key={reply.id} comment={reply} depth={depth + 1} />
+            ))}
           </div>
         )}
       </div>
     );
   };
-  
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-800 flex flex-col font-['Poppins']">
-      {/* Glassmorphism header */}
-      <header className="sticky top-0 z-50 bg-white/10 backdrop-blur-xl py-4 px-5 border-b border-white/20 shadow-lg">
+    <div 
+      className="min-h-screen flex flex-col bg-gradient-to-br from-blue-200 via-purple-200 to-pink-200 font-sans"
+      style={{ fontFamily: "'Poppins', sans-serif" }}
+    >
+      {/* Custom Glassmorphism Styles */}
+      <style>
+        {`
+          .glass-panel {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+          }
+          
+          .floating-btn {
+            background: linear-gradient(135deg, rgba(255,255,255,0.25), rgba(255,255,255,0.1));
+            backdrop-filter: blur(10px);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+          }
+          
+          .refresh-indicator {
+            transition: transform 0.3s ease;
+          }
+          
+          @media (max-width: 640px) {
+            .comment-indent {
+              margin-left: 16px;
+            }
+          }
+        `}
+      </style>
+      
+      {/* Header */}
+      <header className="glass-panel fixed top-0 left-0 right-0 z-50 p-4">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="bg-gradient-to-r from-pink-500 to-purple-600 w-10 h-10 rounded-xl flex items-center justify-center">
-              <span className="text-white font-bold text-xl">C</span>
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-r from-pink-400 to-purple-600 flex items-center justify-center text-white font-bold">
+              CF
             </div>
-            <h1 className="text-xl font-bold text-white">CommunityHub</h1>
+            <h1 className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-500">
+              Community Forum
+            </h1>
           </div>
           
-          <div className="flex items-center gap-3">
-            <button className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-            </button>
-            <button className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-            </button>
-          </div>
+          <button className="p-2 rounded-full bg-white/20 backdrop-blur-sm">
+            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </button>
         </div>
       </header>
       
-      {/* Swipe refresh indicator */}
-      {isRefreshing && (
-        <div className="w-full flex justify-center py-4">
-          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-pink-500"></div>
-        </div>
-      )}
-      
-      {/* Main content */}
+      {/* Main Content */}
       <main 
-        ref={contentRef}
-        className="flex-1 overflow-y-auto pb-24 pt-4 px-4"
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
+        ref={mainContentRef}
+        className="flex-1 pt-20 pb-24 px-4 overflow-auto"
+        onTouchStart={handleTouchStartRefresh}
+        onTouchMove={handleTouchMoveRefresh}
+        onTouchEnd={handleTouchEndRefresh}
       >
-        {/* Forum post */}
-        <div className="bg-white/20 backdrop-blur-lg rounded-2xl p-5 mb-5 shadow-lg border border-purple-200/20">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="bg-gradient-to-r from-blue-500 to-indigo-600 w-12 h-12 rounded-full flex items-center justify-center text-white font-bold">
-              AJ
-            </div>
-            <div>
-              <h2 className="text-xl font-bold text-white">{forumPost.title}</h2>
-              <div className="flex items-center gap-2">
-                <span className="text-white/80 text-sm">by {forumPost.author}</span>
-                <span className="text-white/60 text-xs">•</span>
-                <span className="text-white/60 text-xs">{forumPost.timestamp}</span>
+        {/* Swipe to refresh indicator */}
+        <div 
+          ref={refreshTriggerRef}
+          className="refresh-indicator flex justify-center py-3"
+        >
+          {isRefreshing && (
+            <div className="w-10 h-10 rounded-full border-t-2 border-r-2 border-pink-500 animate-spin"></div>
+          )}
+        </div>
+        
+        <div className="max-w-2xl mx-auto">
+          {/* Forum title */}
+          <div className="glass-panel mb-6 p-5">
+            <h2 className="text-2xl font-bold text-white">Design Discussions</h2>
+            <p className="text-white/80 mt-1">Share ideas, feedback, and inspiration</p>
+          </div>
+          
+          {/* Comments list */}
+          <div className="space-y-6">
+            {comments.length > 0 ? (
+              comments.map(comment => (
+                <CommentComponent key={comment.id} comment={comment} />
+              ))
+            ) : (
+              <div className="glass-panel p-8 text-center">
+                <p className="text-white/80">No discussions yet. Be the first to post!</p>
               </div>
-            </div>
+            )}
           </div>
-          
-          <p className="text-white/90 mb-4">{forumPost.content}</p>
-          
-          <div className="flex flex-wrap gap-2">
-            {forumPost.tags.map(tag => (
-              <span 
-                key={tag} 
-                className="bg-indigo-500/30 text-indigo-200 text-xs px-3 py-1 rounded-full"
-              >
-                #{tag}
-              </span>
-            ))}
-          </div>
-          
-          <div className="flex justify-between items-center mt-4 pt-4 border-t border-white/20">
-            <div className="flex gap-4">
-              <button className="flex items-center gap-1 text-white/80 hover:text-white">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 10h4.764a2 2 0 011.789 2.894l-3.5 7A2 2 0 0115.263 21h-4.017c-.163 0-.326-.02-.485-.06L7 20m7-10V5a2 2 0 00-2-2h-.095c-.5 0-.905.405-.905.905 0 .714-.211 1.412-.608 2.006L7 11v9m7-10h-2M7 20H5a2 2 0 01-2-2v-6a2 2 0 012-2h2.5" />
-                </svg>
-                <span>42</span>
-              </button>
-              <button className="flex items-center gap-1 text-white/80 hover:text-white">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                </svg>
-                <span>{comments.length}</span>
-              </button>
-            </div>
-            
-            <button className="text-pink-400 hover:text-pink-300 flex items-center gap-1">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
-              </svg>
-              <span>Save</span>
-            </button>
-          </div>
-        </div>
-        
-        {/* Comments section header */}
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-bold text-white">Comments</h3>
-          <div className="flex items-center gap-2">
-            <span className="text-white/60 text-sm">Sort by:</span>
-            <select className="bg-indigo-900/50 text-white text-sm rounded-lg px-2 py-1 border border-white/20">
-              <option>Newest</option>
-              <option>Most Popular</option>
-              <option>Oldest</option>
-            </select>
-          </div>
-        </div>
-        
-        {/* Comments list */}
-        <div className="mb-24">
-          {comments.map(comment => renderComment(comment))}
         </div>
       </main>
       
       {/* Floating Action Button */}
-      <div className="fixed bottom-6 right-6 z-50">
-        {isFabMenuOpen ? (
-          <div className="flex flex-col items-end gap-3">
-            <button 
-              onClick={handleAddComment}
-              className="bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-full px-5 py-3 shadow-lg font-medium flex items-center gap-2 transition-transform hover:scale-105"
-            >
-              Post Comment
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clipRule="evenodd" />
-              </svg>
-            </button>
-            <textarea
-              value={newComment}
-              onChange={(e) => setNewComment(e.target.value)}
-              placeholder="Add your comment..."
-              className="w-full bg-white/20 backdrop-blur-lg rounded-2xl p-4 text-white placeholder-white/50 border border-white/20 resize-none focus:outline-none focus:ring-2 focus:ring-purple-400"
-              rows={3}
-            />
-            <button 
-              onClick={() => setIsFabMenuOpen(false)}
-              className="bg-gradient-to-r from-gray-700 to-gray-900 text-white rounded-full w-14 h-14 flex items-center justify-center shadow-lg transition-transform hover:scale-110"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-        ) : (
-          <button 
-            onClick={() => setIsFabMenuOpen(true)}
-            className="bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-full w-14 h-14 flex items-center justify-center shadow-lg transition-transform hover:scale-110"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-            </svg>
-          </button>
-        )}
-      </div>
+      <button
+        className="floating-btn fixed bottom-24 right-4 z-40 w-14 h-14 rounded-full text-white flex items-center justify-center"
+        onClick={() => setNewPostModalOpen(true)}
+      >
+        <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+        </svg>
+      </button>
       
-      {/* Reaction menu */}
-      {showReactionMenu && (
-        <div 
-          className="fixed z-50 bg-white/20 backdrop-blur-xl rounded-full p-2 shadow-xl flex gap-2"
-          style={{
-            left: showReactionMenu.x - 120,
-            top: showReactionMenu.y - 60
-          }}
-        >
-          {emojis.map(emoji => (
-            <button
-              key={emoji}
-              onClick={() => addReaction(showReactionMenu.id, emoji)}
-              className="text-2xl w-10 h-10 flex items-center justify-center rounded-full hover:bg-white/30 transition-all transform hover:scale-125"
-            >
-              {emoji}
+      {/* Footer */}
+      <footer className="glass-panel fixed bottom-0 left-0 right-0 z-50 p-3">
+        <div className="flex justify-around">
+          {['Home', 'Topics', 'Notifications', 'Profile'].map((item) => (
+            <button key={item} className="p-2 text-white/80 hover:text-white transition-colors">
+              {item}
             </button>
           ))}
         </div>
+      </footer>
+      
+      {/* Reaction Menu */}
+      {showReactionMenu && (
+        <div 
+          className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm flex items-center justify-center"
+          onClick={() => setShowReactionMenu(null)}
+        >
+          <div 
+            className="glass-panel p-3 rounded-2xl flex space-x-3 animate-fade-in"
+            style={{
+              position: 'fixed',
+              top: `${showReactionMenu.position.y}px`,
+              left: `${showReactionMenu.position.x}px`,
+              transform: 'translate(-50%, -50%)'
+            }}
+          >
+            {emojiOptions.map(emoji => (
+              <button
+                key={emoji}
+                className="text-2xl p-2 hover:scale-125 transition-transform"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  addReaction(showReactionMenu.commentId, emoji);
+                }}
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+        </div>
       )}
       
-      {/* Glassmorphism footer */}
-      <footer className="sticky bottom-0 bg-white/10 backdrop-blur-xl py-3 px-5 border-t border-white/20 flex justify-around">
-        <button className="flex flex-col items-center text-pink-400">
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-          </svg>
-          <span className="text-xs mt-1">Home</span>
-        </button>
-        
-        <button className="flex flex-col items-center text-white/70">
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-          </svg>
-          <span className="text-xs mt-1">Communities</span>
-        </button>
-        
-        <button className="flex flex-col items-center text-white/70">
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-          </svg>
-          <span className="text-xs mt-1">Messages</span>
-        </button>
-        
-        <button className="flex flex-col items-center text-white/70">
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-          </svg>
-          <span className="text-xs mt-1">Profile</span>
-        </button>
-      </footer>
+      {/* New Post Modal */}
+      {newPostModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-md flex items-center justify-center p-4">
+          <div 
+            className="glass-panel w-full max-w-md rounded-xl p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-xl font-bold text-white mb-4">New Discussion</h3>
+            
+            <textarea
+              className="w-full bg-white/20 backdrop-blur-sm rounded-xl p-4 text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-pink-500"
+              rows={5}
+              placeholder="What would you like to discuss?"
+              value={postContent}
+              onChange={(e) => setPostContent(e.target.value)}
+            />
+            
+            <div className="mt-4 flex justify-end space-x-3">
+              <button
+                className="px-4 py-2 rounded-xl bg-white/20 backdrop-blur-sm text-white hover:bg-white/30 transition-colors"
+                onClick={() => setNewPostModalOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-pink-500 to-purple-600 text-white hover:opacity-90 transition-opacity"
+                onClick={handleSubmitPost}
+              >
+                Post
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
-export default ForumApp;
+export default CommunityForum;
